@@ -1,0 +1,250 @@
+=======================================================
+  MULTILAYER IOT MONITORING SYSTEM
+  Complete Code Documentation
+  Arduino + Raspberry Pi + Nagios
+=======================================================
+
+
+-------------------------------------------------------
+  1. RASPBERRY PI — SYSTEM SETUP
+     Linux commands with explanations
+-------------------------------------------------------
+
+# Connect to the Raspberry Pi remotely via SSH
+# Replace <raspberry-pi-ip> with the actual IP address
+ssh pi@<raspberry-pi-ip>
+
+# Update the list of available packages from the repositories
+# This does NOT install anything yet — it only refreshes the list
+sudo apt update
+
+# Install pip (Python package manager) and the pyserial library
+# pyserial allows Python to communicate with the Arduino via USB serial port
+# The -y flag automatically confirms the installation
+sudo apt install python3-pip python3-serial -y
+
+# Verify that the Arduino is detected by the operating system
+# If the Arduino is connected via USB, it should appear as /dev/ttyACM0
+# In Linux, serial devices are exposed as files inside the /dev/ directory
+ls /dev/ttyACM*
+
+# Create the project directory structure
+# The -p flag creates all intermediate directories if they don't exist
+mkdir -p ~/password-monitoring-project/raspberrypi
+
+# Navigate into the project directory
+cd ~/password-monitoring-project/raspberrypi
+
+# If the Arduino is not detected, add the current user to the 'dialout' group
+# This group has permissions to access serial ports
+# You need to log out and log back in for this change to take effect
+sudo usermod -a -G dialout $USER
+
+
+-------------------------------------------------------
+  2. PYTHON LOGGER — password_logger.py
+     Full script with line-by-line comments
+-------------------------------------------------------
+
+import serial        # Allows Python to communicate with serial ports (USB/Arduino)
+import csv           # Handles reading and writing CSV files correctly
+import time          # Time utilities (available but not actively used in the loop)
+from datetime import datetime  # Used to get the current date and time as a timestamp
+import os            # Used to check if a file already exists on the filesystem
+
+# ── Configuration variables ──────────────────────────────────────────────────
+# If the Arduino appears on a different port (e.g. /dev/ttyACM1), change it here
+SERIAL_PORT = '/dev/ttyACM0'   # The port where Linux exposes the Arduino
+BAUD_RATE   = 9600              # Communication speed in bauds — must match the Arduino code
+LOG_FILE    = 'password_log.csv'  # Name of the file where events will be stored
+
+# ── Create the CSV file if it does not exist ─────────────────────────────────
+# This block runs only the first time the script is executed
+# It creates the file with the column headers so the CSV always has a valid structure
+if not os.path.exists(LOG_FILE):
+    with open(LOG_FILE, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['timestamp', 'event'])  # Column headers: timestamp and event
+    print(f'File {LOG_FILE} created')
+
+# ── Main block ───────────────────────────────────────────────────────────────
+
+    # Open the serial connection to the Arduino
+    # timeout=1 means: if no data arrives within 1 second, don't block — continue the loop
+    # This is important so the script can respond to Ctrl+C without freezing
+    ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+    print(f'Connected to {SERIAL_PORT}')
+    print(f'Saving logs to {LOG_FILE}')
+    print('Waiting for Arduino data...\n')
+
+    # ── Infinite listening loop ───────────────────────────────────────────────
+    while True:
+        # Check if there are bytes waiting in the serial buffer
+        # If the Arduino has not sent anything, this condition is False
+        # and Python simply repeats the loop without doing anything
+        if ser.in_waiting > 0:
+
+            # Read bytes from the serial port until a newline character (\n) is found
+            # The Arduino sends one event per line
+            line = ser.readline()
+
+            # .decode('utf-8') converts raw bytes into readable text
+            # Python receives bytes from USB, not text directly
+            # .strip() removes whitespace, tabs and newlines at start and end
+            # This ensures we store 'ACCESS_FAIL' and not 'ACCESS_FAIL\r\n'
+            line = line.decode('utf-8').strip()
+
+            # Capture the exact moment the message arrived
+            # The Arduino does NOT send timestamps — Python adds them here
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            # Open the CSV file in append mode ('a')
+            # Append mode adds a new row at the end without deleting existing data
+            with open(LOG_FILE, 'a', newline='') as f:
+                writer = csv.writer(f)
+                # Write a new row with two columns: timestamp and event
+                writer.writerow([timestamp, line])
+
+            # Print the event to the terminal so we can monitor it in real time
+            print(f'[{timestamp}] {line}')
+
+# ── Error handling ────────────────────────────────────────────────────────────
+except KeyboardInterrupt:
+    # Triggered when the user presses Ctrl+C to stop the script
+    # The program ends cleanly instead of showing an ugly traceback
+    print('\nLogger stopped')
+
+except Exception as e:
+    # Catches any other unexpected error
+    # For example: if the Arduino disconnects mid-execution
+    print(f'Error: {e}')
+
+finally:
+    # The finally block always runs, regardless of what happened above
+    # It closes the serial port connection cleanly
+    # This releases the resource so other programs can use it
+    if 'ser' in locals():
+        ser.close()
+
+
+-------------------------------------------------------
+  3. NAGIOS PLUGIN — check_password_system.sh
+     Bash script with explanations
+-------------------------------------------------------
+
+#!/bin/bash
+# This script is a Nagios plugin
+# Nagios runs it automatically every 1 minute
+# It reads the CSV log file and returns a status code:
+#   exit 0 = OK
+#   exit 1 = WARNING
+#   exit 2 = CRITICAL
+
+# Path to the CSV log file generated by the Python logger
+LOG_FILE="/home/pi/password-monitoring-project/raspberrypi/password_log.csv"
+
+# Check if the log file exists
+# If Python is not running or the file was deleted, Nagios will show CRITICAL
+if [ ! -f "$LOG_FILE" ]; then
+    echo "CRITICAL - Log file not found"
+    exit 2
+
+
+# Generate a timestamp from 5 minutes ago
+# Only events more recent than this value will be analyzed
+THRESHOLD_TIME=$(date -d '5 minutes ago' '+%Y-%m-%d %H:%M:%S')
+
+# Count how many ACCESS_FAIL events occurred in the last 5 minutes
+# awk processes the CSV line by line, using comma as the column separator
+# It compares the timestamp in column 1 against the threshold
+# and counts rows where column 2 contains ACCESS_FAIL
+FAIL_COUNT=$(awk -F',' -v threshold="$THRESHOLD_TIME" \
+    '$1 > threshold && $2 ~ /ACCESS_FAIL/ {count++} END {print count+0}' "$LOG_FILE")
+
+# Count how many LOCKED events occurred in the last 5 minutes
+# Same logic as above but filtering for LOCKED events
+LOCKED_COUNT=$(awk -F',' -v threshold="$THRESHOLD_TIME" \
+    '$1 > threshold && $2 ~ /LOCKED/ {count++} END {print count+0}' "$LOG_FILE")
+
+# ── Decision logic ────────────────────────────────────────────────────────────
+# If the system was locked at least once in the last 5 minutes → CRITICAL
+# A lockout means 3 consecutive failed attempts — possible unauthorized access
+if [ "$LOCKED_COUNT" -ge 1 ]; then
+    echo "CRITICAL - System locked $LOCKED_COUNT time(s) in last 5 minutes | fails=$FAIL_COUNT locks=$LOCKED_COUNT"
+    exit 2
+
+# If there were 5 or more failed attempts in the last 5 minutes → WARNING
+# Suspicious activity but the system has not locked yet
+elif [ "$FAIL_COUNT" -ge 5 ]; then
+    echo "WARNING - $FAIL_COUNT failed attempts in last 5 minutes | fails=$FAIL_COUNT locks=$LOCKED_COUNT"
+    exit 1
+
+# Otherwise → everything is normal
+else
+    echo "OK - System normal: $FAIL_COUNT fails, $LOCKED_COUNT locks | fails=$FAIL_COUNT locks=$LOCKED_COUNT"
+    exit 0
+
+
+
+-------------------------------------------------------
+  4. NAGIOS — DEPLOYMENT COMMANDS
+     Linux commands with explanations
+-------------------------------------------------------
+
+# Make the script executable
+# Without this, the operating system will not allow it to run
+chmod +x check_password_system.sh
+
+# Copy the plugin to the official Nagios plugins directory
+# Nagios looks for its plugins in this folder by default
+sudo cp check_password_system.sh /usr/local/nagios/libexec/
+
+# Validate the Nagios configuration before restarting
+# Always run this first — if there are syntax errors, Nagios will tell you here
+sudo /usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg
+
+# Restart the Nagios service to load the new configuration
+# After this, the plugin runs automatically every 1 minute
+sudo systemctl restart nagios
+
+# Fix file permissions if Nagios cannot read the CSV
+# Nagios runs under its own system user and needs read access to the file
+sudo chmod 644 ~/password-monitoring-project/raspberrypi/password_log.csv
+sudo chmod 755 ~/password-monitoring-project/raspberrypi
+sudo chmod 755 ~/password-monitoring-project
+sudo chmod 755 ~
+
+
+-------------------------------------------------------
+  5. USEFUL COMMANDS — Day to day
+-------------------------------------------------------
+
+# Start the Python logger
+cd ~/password-monitoring-project/raspberrypi
+python3 password_logger.py
+
+# View the contents of the log file
+cat ~/password-monitoring-project/raspberrypi/password_log.csv
+
+# Download the CSV file from the Raspberry Pi to your local machine
+# Run this from your local computer, not from the Raspberry Pi
+scp pi@<raspberry-pi-ip>:~/password-monitoring-project/raspberrypi/password_log.csv ~/Downloads/
+
+# Access the Nagios web dashboard
+# Open this URL in your browser (replace with your Raspberry Pi IP)
+# http://<raspberry-pi-ip>:8090/nagios
+
+
+-------------------------------------------------------
+  6. EVENT TYPES
+-------------------------------------------------------
+
+  ACCESS_OK    →  Correct password entered — access granted
+  ACCESS_FAIL  →  Incorrect password entered
+  LOCKED       →  System locked after 3 consecutive failed attempts
+                  The Arduino blocks input for 10 seconds
+
+
+=======================================================
+  END OF DOCUMENTATION
+=======================================================
