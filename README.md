@@ -12,7 +12,8 @@ Deploy a multi-layer monitoring system on a Raspberry Pi integrating real hardwa
 The goal was to build a working end-to-end system, not a simulation.
 
 This project was fully documented including setup steps, issues encountered, troubleshooting decisions, and the reasoning behind key technical choices.
-
+![Hardware](imagen1.jpg)
+![Nagios](imagen2.png)
 ---
 
 ## Why does this matter?
@@ -28,9 +29,11 @@ It demonstrates hands-on experience with hardware control, log analysis in a Lin
 4. Layer 2 – Raspberry Pi Integration  
 5. Layer 3 – Monitoring with Nagios  
 6. Layer 4 – Excel Visualization  
-
+# End - to End data flow across the four layers of the system
+![Data Flow](imagen3.jpg)
 ---
-
+# The Journey of a single piece of data: From keypress to CSV
+![Event Table](imagen4.jpg)
 ## System Description
 The system detects authentication attempts through a keypad connected to an Arduino Uno.  
 When an incorrect password is entered, the Arduino sends an event over serial communication to a Raspberry Pi.
@@ -41,10 +44,10 @@ Finally, Excel is used to visualize access patterns and anomalies.
 
 ---
 
-## Workflow and Architecture
+![LCD](imagen5.jpg)
 
 ## Hardware Components
-![Hardware](images/imagen1.jpg)
+
 | Component | Role |
 |-----------|------|
 | Arduino Uno | Main microcontroller and authentication logic |
@@ -64,15 +67,10 @@ The Python script runs continuously on the Raspberry Pi, listening to the USB se
 
 Its only job is to receive each message, add a timestamp, and save it to a CSV file.  
 Python does not interpret or evaluate events — that responsibility belongs to Nagios.
+To keep this documentation clean and focused on system architecture, the implementation code for this layer was separated from the README and organized inside the project directory.
 
-
-
-## Raspberry Pi Integration
-This layer acts as the bridge between the hardware and monitoring systems.  
-The Python script runs continuously on the Raspberry Pi, listening to the USB serial port where the Arduino broadcasts events.
-
-Its only job is to receive each message, add a timestamp, and save it to a CSV file.  
-Python does not interpret or evaluate events — that responsibility belongs to Nagios.
+The Raspberry Pi logic is contained in the `raspberrypi/` folder, which includes the Python logger and generated CSV logs.  
+This allows the README to describe behavior and design decisions while the folder holds the executable components.
 
 
 ---
@@ -83,9 +81,7 @@ A custom plugin evaluates recent log entries and raises alerts based on failed a
 
 This provides real-time visibility into authentication activity.
 
----
-
-## Layer Responsibility
+ Layer Responsibility
 The Raspberry Pi integration layer acts as the lightweight event ingestion and persistence component.  
 It continuously listens to the Arduino serial output, captures authentication events, and stores them with timestamps.
 
@@ -95,6 +91,7 @@ Its purpose is to provide a reliable and structured event stream consumed by mon
 ---
 
 ## Excel Visualization
+![Excel](Grafico.png)
 The Excel dashboard provides a lightweight analytics layer on top of the monitoring pipeline.
 
 By importing the CSV log generated on the Raspberry Pi, authentication events can be aggregated and visualized to reveal:
@@ -102,6 +99,7 @@ By importing the CSV log generated on the Raspberry Pi, authentication events ca
 - Access attempt frequency
 - Failure correlation and lockout patterns
 - Time-based anomalies
+  ![Nagios OK](iamgen7.png)
 
 ---
 
