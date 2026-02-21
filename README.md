@@ -43,7 +43,19 @@ Finally, Excel is used to visualize access patterns and anomalies.
 
 ## Workflow and Architecture
 
-
+## Hardware Components
+![Hardware](images/imagen1.jpg)
+| Component | Role |
+|-----------|------|
+| Arduino Uno | Main microcontroller and authentication logic |
+| Protoboard | Hardware connection base |
+| Jumper wires | Physical connections |
+| 4x4 Matrix Keypad | Password input |
+| LCD 16x2 | Displays system state |
+| 10K Potentiometer | Controls LCD contrast |
+| USB Cable | Serial communication to Raspberry Pi |
+| Laptop | Arduino development |
+| Raspberry Pi | Python logger + Nagios stack |
 
 
 ## Raspberry Pi Integration
@@ -53,7 +65,7 @@ The Python script runs continuously on the Raspberry Pi, listening to the USB se
 Its only job is to receive each message, add a timestamp, and save it to a CSV file.  
 Python does not interpret or evaluate events — that responsibility belongs to Nagios.
 
-Project structure:
+
 
 ## Raspberry Pi Integration
 This layer acts as the bridge between the hardware and monitoring systems.  
@@ -61,8 +73,6 @@ The Python script runs continuously on the Raspberry Pi, listening to the USB se
 
 Its only job is to receive each message, add a timestamp, and save it to a CSV file.  
 Python does not interpret or evaluate events — that responsibility belongs to Nagios.
-
-Project structure:
 
 
 ---
