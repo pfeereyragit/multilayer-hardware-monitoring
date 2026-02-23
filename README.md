@@ -71,21 +71,19 @@ To keep this documentation clean and focused on system architecture, the impleme
 The Raspberry Pi logic is contained in the `raspberrypi/` folder, which includes the Python logger and generated CSV logs.  
 This allows the README to describe behavior and design decisions while the folder holds the executable components.
 
+This layer does not evaluate system health or generate alerts.  
+Its purpose is to provide a reliable and structured event stream consumed by monitoring and analytics tools.
+
 
 ---
 
 ## Monitoring with Nagios
 Nagios monitors the CSV log in real time.  
 A custom plugin evaluates recent log entries and raises alerts based on failed attempts and lockout events.
+![Nagios OK](iamgen7.png)
 
 This provides real-time visibility into authentication activity.
 
- Layer Responsibility
-The Raspberry Pi integration layer acts as the lightweight event ingestion and persistence component.  
-It continuously listens to the Arduino serial output, captures authentication events, and stores them with timestamps.
-
-This layer does not evaluate system health or generate alerts.  
-Its purpose is to provide a reliable and structured event stream consumed by monitoring and analytics tools.
 
 ---
 
@@ -98,7 +96,7 @@ By importing the CSV log generated on the Raspberry Pi, authentication events ca
 - Access attempt frequency
 - Failure correlation and lockout patterns
 - Time-based anomalies
-  ![Nagios OK](iamgen7.png)
+  
 
 ---
 
