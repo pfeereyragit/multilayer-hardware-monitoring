@@ -11,7 +11,6 @@ Deploy a multi-layer monitoring system on a Raspberry Pi integrating real hardwa
 
 The goal was to build a working end-to-end system, not a simulation.
 
-This project was fully documented including setup steps, issues encountered, troubleshooting decisions, and the reasoning behind key technical choices.
 ![Hardware](imagen1.jpg)
 ![Nagios](imagen2.png)
 ---
